@@ -4,15 +4,22 @@ import org.jboss.logging.Logger;
 import org.keycloak.authentication.AuthenticationFlowContext;
 import org.keycloak.authentication.AuthenticationFlowError;
 import org.keycloak.authentication.Authenticator;
+import org.keycloak.authentication.CredentialValidator;
+import org.keycloak.authentication.authenticators.challenge.BasicAuthAuthenticator;
+import org.keycloak.common.util.Time;
 import org.keycloak.credential.CredentialModel;
+import org.keycloak.credential.CredentialProvider;
 import org.keycloak.models.AuthenticationExecutionModel;
 import org.keycloak.models.AuthenticatorConfigModel;
 import org.keycloak.models.KeycloakSession;
 import org.keycloak.models.RealmModel;
+import org.keycloak.models.UserCredentialManager;
 import org.keycloak.models.UserCredentialModel;
 import org.keycloak.models.UserModel;
 import six.six.keycloak.KeycloakSmsConstants;
 import six.six.keycloak.MobileNumberHelper;
+import six.six.keycloak.authenticator.credential.KeycloakSmsAuthenticatorCredentialProvider;
+import six.six.keycloak.authenticator.credential.SmsOtpCredentialModel;
 import six.six.keycloak.requiredaction.action.required.KeycloakSmsMobilenumberRequiredAction;
 
 import javax.ws.rs.core.MultivaluedMap;
@@ -23,7 +30,7 @@ import java.util.List;
 /**
  * Created by joris on 11/11/2016.
  */
-public class KeycloakSmsAuthenticator implements Authenticator {
+public class KeycloakSmsAuthenticator extends BasicAuthAuthenticator implements Authenticator, CredentialValidator<KeycloakSmsAuthenticatorCredentialProvider> {
 
     private static Logger logger = Logger.getLogger(KeycloakSmsAuthenticator.class);
 
@@ -79,6 +86,8 @@ public class KeycloakSmsAuthenticator implements Authenticator {
                 String code = KeycloakSmsAuthenticatorUtil.getSmsCode(nrOfDigits);
 
                 storeSMSCode(context, code, new Date().getTime() + (ttl * 1000)); // s --> ms
+//                Response challenge = context.form().createForm("sms-validation.ftl");
+//                context.challenge(challenge);
                 if (KeycloakSmsAuthenticatorUtil.sendSmsCode(mobileNumber, code, context)) {
                     Response challenge = context.form().createForm("sms-validation.ftl");
                     context.challenge(challenge);
@@ -163,19 +172,48 @@ public class KeycloakSmsAuthenticator implements Authenticator {
             }
         }
     }
+    
+    private List<CredentialModel> getStoredCredentialsByType(AuthenticationFlowContext context, String type){
+    	return userCredentialManager(context).getStoredCredentialsByType(context.getRealm(), context.getUser(),type);
+    }
+    
+    private UserCredentialManager userCredentialManager(AuthenticationFlowContext context) {
+    	return context.getSession().userCredentialManager();
+    }
 
     // Store the code + expiration time in a UserCredential. Keycloak will persist these in the DB.
     // When the code is validated on another node (in a clustered environment) the other nodes have access to it's values too.
     private void storeSMSCode(AuthenticationFlowContext context, String code, Long expiringAt) {
-        UserCredentialModel credentials = new UserCredentialModel();
-        credentials.setType(KeycloakSmsConstants.USR_CRED_MDL_SMS_CODE);
-        credentials.setValue(code);
 
-        context.getSession().userCredentialManager().updateCredential(context.getRealm(), context.getUser(), credentials);
+    	List<CredentialModel> codeCreds = getStoredCredentialsByType(context, KeycloakSmsConstants.USR_CRED_MDL_SMS_CODE);
+        List<CredentialModel> timeCreds = getStoredCredentialsByType(context, KeycloakSmsConstants.USR_CRED_MDL_SMS_EXP_TIME);
+        CredentialModel codeCredentials, timeCredentials;
+    
+		if (codeCreds.isEmpty()) {
+			codeCredentials = new CredentialModel();
+			timeCredentials = new CredentialModel();
 
-        credentials.setType(KeycloakSmsConstants.USR_CRED_MDL_SMS_EXP_TIME);
-        credentials.setValue((expiringAt).toString());
-        context.getSession().userCredentialManager().updateCredential(context.getRealm(), context.getUser(), credentials);
+			codeCredentials.setType(KeycloakSmsConstants.USR_CRED_MDL_SMS_CODE);
+			codeCredentials.setCredentialData(code);
+
+			userCredentialManager(context).createCredential(context.getRealm(), context.getUser(), codeCredentials);
+
+			timeCredentials.setType(KeycloakSmsConstants.USR_CRED_MDL_SMS_EXP_TIME);
+			timeCredentials.setCredentialData(code);
+			timeCredentials.setSecretData((expiringAt).toString());
+			context.getSession().userCredentialManager().createCredential(context.getRealm(), context.getUser(),
+					timeCredentials);
+		} else {
+			codeCredentials = codeCreds.get(0);
+			timeCredentials = timeCreds.get(0);
+			codeCredentials.setCredentialData(code);
+			userCredentialManager(context).updateCredential(context.getRealm(), context.getUser(), codeCredentials);
+
+			timeCredentials.setType(KeycloakSmsConstants.USR_CRED_MDL_SMS_EXP_TIME);
+			timeCredentials.setCredentialData(code);
+			timeCredentials.setSecretData((expiringAt).toString());
+			userCredentialManager(context).updateCredential(context.getRealm(), context.getUser(), timeCredentials);
+		}
     }
 
 
@@ -185,27 +223,26 @@ public class KeycloakSmsAuthenticator implements Authenticator {
         logger.debug("validateCode called ... ");
         MultivaluedMap<String, String> formData = context.getHttpRequest().getDecodedFormParameters();
         String enteredCode = formData.getFirst(KeycloakSmsConstants.ANSW_SMS_CODE);
-        KeycloakSession session = context.getSession();
 
-        List codeCreds = session.userCredentialManager().getStoredCredentialsByType(context.getRealm(), context.getUser(), KeycloakSmsConstants.USR_CRED_MDL_SMS_CODE);
-        /*List timeCreds = session.userCredentialManager().getStoredCredentialsByType(context.getRealm(), context.getUser(), KeycloakSmsAuthenticatorConstants.USR_CRED_MDL_SMS_EXP_TIME);*/
+        List<CredentialModel> codeCreds = getStoredCredentialsByType(context, KeycloakSmsConstants.USR_CRED_MDL_SMS_CODE);
+        List<CredentialModel> timeCreds = getStoredCredentialsByType(context, KeycloakSmsConstants.USR_CRED_MDL_SMS_EXP_TIME);
 
         CredentialModel expectedCode = (CredentialModel) codeCreds.get(0);
-        /*CredentialModel expTimeString = (CredentialModel) timeCreds.get(0);*/
+        CredentialModel expTimeString = (CredentialModel) timeCreds.get(0);
 
         logger.debug("Expected code = " + expectedCode + "    entered code = " + enteredCode);
 
         if (expectedCode != null) {
-            result = enteredCode.equals(expectedCode.getValue()) ? CODE_STATUS.VALID : CODE_STATUS.INVALID;
-            /*long now = new Date().getTime();
+            result = enteredCode.equals(expectedCode.getCredentialData()) ? CODE_STATUS.VALID : CODE_STATUS.INVALID;
+            long now = new Date().getTime();
 
-            logger.debug("Valid code expires in " + (Long.parseLong(expTimeString.getValue()) - now) + " ms");
+            logger.debug("Valid code expires in " + (Long.parseLong(expTimeString.getSecretData()) - now) + " ms");
             if (result == CODE_STATUS.VALID) {
-                if (Long.parseLong(expTimeString.getValue()) < now) {
+                if (Long.parseLong(expTimeString.getSecretData()) < now) {
                     logger.debug("Code is expired !!");
                     result = CODE_STATUS.EXPIRED;
                 }
-            }*/
+            }
         }
         logger.debug("result : " + result);
         return result;
@@ -223,11 +260,16 @@ public class KeycloakSmsAuthenticator implements Authenticator {
 
     @Override
     public void setRequiredActions(KeycloakSession session, RealmModel realm, UserModel user) {
-        logger.debug("setRequiredActions called ... session=" + session + ", realm=" + realm + ", user=" + user);
+        user.addRequiredAction(KeycloakSmsMobilenumberRequiredAction.PROVIDER_ID);
     }
     @Override
     public void close() {
         logger.debug("close called ...");
     }
+
+	@Override
+	public KeycloakSmsAuthenticatorCredentialProvider getCredentialProvider(KeycloakSession session) {
+		return (KeycloakSmsAuthenticatorCredentialProvider)session.getProvider(CredentialProvider.class, "smsCode");
+	}
 
 }

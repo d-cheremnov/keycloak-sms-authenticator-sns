@@ -1,0 +1,1 @@
+package six.six.keycloak.authenticator.credential.dto;

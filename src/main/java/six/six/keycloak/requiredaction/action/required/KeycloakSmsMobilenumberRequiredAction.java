@@ -15,6 +15,7 @@ import static six.six.keycloak.authenticator.KeycloakSmsAuthenticatorUtil.isPhon
 
 /**
  * Created by nickpack on 15/08/2017.
+ * This is an action which will be triggered if Mobile number is missing for user.
  */
 public class KeycloakSmsMobilenumberRequiredAction implements RequiredActionProvider {
     private static Logger logger = Logger.getLogger(KeycloakSmsMobilenumberRequiredAction.class);
@@ -23,7 +24,6 @@ public class KeycloakSmsMobilenumberRequiredAction implements RequiredActionProv
     public void evaluateTriggers(RequiredActionContext context) {
         logger.debug("evaluateTriggers called ...");
     }
-
 
 
     public void requiredActionChallenge(RequiredActionContext context) {

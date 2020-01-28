@@ -12,6 +12,8 @@ import org.keycloak.models.AuthenticatorConfigModel;
 import org.keycloak.models.UserModel;
 import org.keycloak.theme.Theme;
 import org.keycloak.theme.ThemeProvider;
+
+import six.six.gateway.ConsoleSmsService;
 import six.six.gateway.Gateways;
 import six.six.gateway.SMSService;
 import six.six.gateway.aws.snsclient.SnsNotificationService;
@@ -125,7 +127,7 @@ public class KeycloakSmsAuthenticatorUtil {
 
         PhoneNumberUtil phoneUtil = PhoneNumberUtil.getInstance();
         try {
-            Phonenumber.PhoneNumber phone = phoneUtil.parse(mobileNumber, null);
+            Phonenumber.PhoneNumber phone = phoneUtil.parse(mobileNumber, "IN");
             mobileNumber = phoneUtil.format(phone,
                     PhoneNumberUtil.PhoneNumberFormat.E164);
         } catch (NumberParseException e) {
@@ -196,8 +198,10 @@ public class KeycloakSmsAuthenticatorUtil {
                 case GOVUK_NOTIFY:
                     smsService = new NotifySMSService(notifyApiKey, notifyTemplate);
                     break;
-                default:
+                case AMAZON_SNS:
                     smsService = new SnsNotificationService();
+                default:
+                	smsService = new ConsoleSmsService();
             }
 
             result=smsService.send(checkMobileNumber(setDefaultCountryCodeIfZero(mobileNumber, getMessage(context, KeycloakSmsConstants.MSG_MOBILE_PREFIX_DEFAULT), getMessage(context, KeycloakSmsConstants.MSG_MOBILE_PREFIX_CONDITION))), smsText, smsUsr, smsPwd);
@@ -228,7 +232,7 @@ public class KeycloakSmsAuthenticatorUtil {
 
         String region;
         if (isPossibleNationalNumber(formattedPhoneNumber)) {
-            region = "GB";
+            region = "IN";
         } else if (isInternationalNumber(formattedPhoneNumber)) {
             region = null;
         } else {
@@ -252,7 +256,7 @@ public class KeycloakSmsAuthenticatorUtil {
     }
 
     private static boolean isPossibleNationalNumber(String phoneNumber) {
-        return phoneNumber.trim().startsWith("+44") || phoneNumber.trim().startsWith("07");
+        return phoneNumber.trim().startsWith("+91") || phoneNumber.trim().startsWith("0091");
     }
 
     private static boolean isInternationalNumber(String phoneNumber) {
