@@ -6,7 +6,6 @@ import org.keycloak.authentication.AuthenticationFlowError;
 import org.keycloak.authentication.Authenticator;
 import org.keycloak.authentication.CredentialValidator;
 import org.keycloak.authentication.authenticators.challenge.BasicAuthAuthenticator;
-import org.keycloak.common.util.Time;
 import org.keycloak.credential.CredentialModel;
 import org.keycloak.credential.CredentialProvider;
 import org.keycloak.models.AuthenticationExecutionModel;
@@ -14,12 +13,10 @@ import org.keycloak.models.AuthenticatorConfigModel;
 import org.keycloak.models.KeycloakSession;
 import org.keycloak.models.RealmModel;
 import org.keycloak.models.UserCredentialManager;
-import org.keycloak.models.UserCredentialModel;
 import org.keycloak.models.UserModel;
 import six.six.keycloak.KeycloakSmsConstants;
 import six.six.keycloak.MobileNumberHelper;
 import six.six.keycloak.authenticator.credential.KeycloakSmsAuthenticatorCredentialProvider;
-import six.six.keycloak.authenticator.credential.SmsOtpCredentialModel;
 import six.six.keycloak.requiredaction.action.required.KeycloakSmsMobilenumberRequiredAction;
 
 import javax.ws.rs.core.MultivaluedMap;
@@ -60,6 +57,20 @@ public class KeycloakSmsAuthenticator extends BasicAuthAuthenticator implements 
         }
         return  mobileNumberVerified;
     }
+    
+	private boolean sendSmsCode(AuthenticationFlowContext context, String mobileNumber) {
+		long nrOfDigits = KeycloakSmsAuthenticatorUtil.getConfigLong(context.getAuthenticatorConfig(),
+				KeycloakSmsConstants.CONF_PRP_SMS_CODE_LENGTH, 8L);
+		long ttl = KeycloakSmsAuthenticatorUtil.getConfigLong(context.getAuthenticatorConfig(),
+				KeycloakSmsConstants.CONF_PRP_SMS_CODE_TTL, 10 * 60L); // 10 minutes in s
+
+		String code = KeycloakSmsAuthenticatorUtil.getSmsCode(nrOfDigits);
+
+		logger.debug("Generated SMSCode with " + nrOfDigits + " digits with ttl " + ttl + " (s)");
+
+		storeSMSCode(context, code, new Date().getTime() + (ttl * 1000)); // s --> ms
+		return KeycloakSmsAuthenticatorUtil.sendSmsCode(mobileNumber, code, context);
+	}
 
     @Override
     public void authenticate(AuthenticationFlowContext context) {
@@ -75,20 +86,8 @@ public class KeycloakSmsAuthenticator extends BasicAuthAuthenticator implements 
         if (onlyForVerification==false || isOnlyForVerificationMode(onlyForVerification, mobileNumber,mobileNumberVerified)){
             if (mobileNumber != null) {
                 // The mobile number is configured --> send an SMS
-                long nrOfDigits = KeycloakSmsAuthenticatorUtil.getConfigLong(config, KeycloakSmsConstants.CONF_PRP_SMS_CODE_LENGTH, 8L);
-                logger.debug("Using nrOfDigits " + nrOfDigits);
-
-
-                long ttl = KeycloakSmsAuthenticatorUtil.getConfigLong(config, KeycloakSmsConstants.CONF_PRP_SMS_CODE_TTL, 10 * 60L); // 10 minutes in s
-
-                logger.debug("Using ttl " + ttl + " (s)");
-
-                String code = KeycloakSmsAuthenticatorUtil.getSmsCode(nrOfDigits);
-
-                storeSMSCode(context, code, new Date().getTime() + (ttl * 1000)); // s --> ms
-//                Response challenge = context.form().createForm("sms-validation.ftl");
-//                context.challenge(challenge);
-                if (KeycloakSmsAuthenticatorUtil.sendSmsCode(mobileNumber, code, context)) {
+               
+                if (sendSmsCode(context, mobileNumber)) {
                     Response challenge = context.form().createForm("sms-validation.ftl");
                     context.challenge(challenge);
                 } else {
