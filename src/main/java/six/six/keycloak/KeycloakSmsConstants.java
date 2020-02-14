@@ -6,6 +6,8 @@ package six.six.keycloak;
 public class KeycloakSmsConstants {
     public static final String ATTR_MOBILE = "mobile_number";
     public static final String ATTR_MOBILE_VERIFIED = "mobile_number_verified";
+    public static final String ATTR_ALT_MOBILE = "alt_mobile_number";
+    public static final String ATTR_ALT_MOBILE_VERIFIED = "alt_mobile_number_verified";
     public static final String VERIFY_MOBILENUMBER_KEY = "VERIFY_MOBILENUMBER_KEY";
     public static final String ANSW_SMS_CODE = "smsCode";
 
@@ -24,6 +26,10 @@ public class KeycloakSmsConstants {
     // User credentials (used to persist the sent sms code + expiration time cluster wide)
     public static final String USR_CRED_MDL_SMS_CODE = "sms-auth.code";
     public static final String USR_CRED_MDL_SMS_EXP_TIME = "sms-auth.exp-time";
+    
+ // User credentials (used to persist the sent sms code + expiration time cluster wide)
+    public static final String USR_CRED_MDL_SMS_CODE_ALT = "alt-sms-auth.code";
+    public static final String USR_CRED_MDL_SMS_ALT_EXP_TIME = "alt-sms-auth.exp-time";
 
     // Messages
     public static final String MSG_MOBILE_REGEXP = "mobile_number.regexp.validation";
@@ -42,6 +48,7 @@ public class KeycloakSmsConstants {
 
     // Verification
     public static final String MOBILE_VERIFICATION_ENABLED = "mobile_verification_enabled";
+    public static final String ALT_MOBILE_VERIFICATION_ENABLED = "alternate_mobile_verification_enabled";
     public static final String MOBILE_ASKFOR_ENABLED = "mobile_askfor_enabled";
 
     // GOV.UK Notify

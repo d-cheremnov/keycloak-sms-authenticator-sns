@@ -150,20 +150,7 @@ public class KeycloakSmsAuthenticatorUtil {
         }
         return result;
     }
-
-    public static String getMessage(RequiredActionContext context, String key){
-        String result=null;
-        try {
-            ThemeProvider themeProvider = context.getSession().getProvider(ThemeProvider.class, "extending");
-            Theme currentTheme = themeProvider.getTheme(context.getRealm().getLoginTheme(), Theme.Type.LOGIN);
-            Locale locale = context.getSession().getContext().resolveLocale(context.getUser());
-            result = currentTheme.getMessages(locale).getProperty(key);
-        }catch (IOException e){
-            logger.warn(key + "not found in messages");
-        }
-        return result;
-    }
-
+    
 
     static boolean sendSmsCode(String mobileNumber, String code, AuthenticationFlowContext context) {
         final AuthenticatorConfigModel config = context.getAuthenticatorConfig();
@@ -212,7 +199,7 @@ public class KeycloakSmsAuthenticatorUtil {
         }
     }
 
-    static String getSmsCode(long nrOfDigits) {
+    public static String getSmsCode(long nrOfDigits) {
         if (nrOfDigits < 1) {
             throw new RuntimeException("Number of digits must be bigger than 0");
         }

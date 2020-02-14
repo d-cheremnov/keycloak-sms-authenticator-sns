@@ -108,6 +108,14 @@ public class KeycloakSmsAuthenticatorFactory implements AuthenticatorFactory, Co
         property.setLabel("Verify mobilephone\nnumber ONLY");
         property.setHelpText("Send SMS code ONLY to verify mobile number (add or update)");
         configProperties.add(property);
+        
+        //First time verification of Alternate Mobile Number.
+        property = new ProviderConfigProperty();
+        property.setName(KeycloakSmsConstants.ALT_MOBILE_VERIFICATION_ENABLED);
+        property.setType(ProviderConfigProperty.BOOLEAN_TYPE);
+        property.setLabel("Verify alternate\nmobilephone number");
+        property.setHelpText("Send SMS code to veify alternate mobile number (add or update)");
+        configProperties.add(property);
 
         //Ask for mobile if not defined
         property = new ProviderConfigProperty();

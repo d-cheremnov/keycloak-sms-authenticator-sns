@@ -23,6 +23,7 @@ import javax.ws.rs.core.MultivaluedMap;
 import javax.ws.rs.core.Response;
 import java.util.Date;
 import java.util.List;
+import static six.six.keycloak.MobileNumberHelper.isMobileNumberVerified;
 
 /**
  * Created by joris on 11/11/2016.
@@ -99,7 +100,7 @@ public class KeycloakSmsAuthenticator extends BasicAuthAuthenticator implements 
             } else {
                 boolean isAskingFor=KeycloakSmsAuthenticatorUtil.getConfigBoolean(config, KeycloakSmsConstants.MOBILE_ASKFOR_ENABLED);
                 if(isAskingFor){
-                    //Enable access and ask for mobilenumber
+                    //Enable access and ask for mobile number
                     user.addRequiredAction(KeycloakSmsMobilenumberRequiredAction.PROVIDER_ID);
                     context.success();
                 }else {
@@ -163,7 +164,7 @@ public class KeycloakSmsAuthenticator extends BasicAuthAuthenticator implements 
         UserModel user = context.getUser();
         boolean onlyForVerification=KeycloakSmsAuthenticatorUtil.getConfigBoolean(config, KeycloakSmsConstants.MOBILE_VERIFICATION_ENABLED);
 
-        if(onlyForVerification){
+        if(onlyForVerification || !isMobileNumberVerified(user)){
             //Only verification mode
             List<String> mobileNumberCreds = user.getAttribute(KeycloakSmsConstants.ATTR_MOBILE);
             if (mobileNumberCreds != null && !mobileNumberCreds.isEmpty()) {
@@ -183,35 +184,22 @@ public class KeycloakSmsAuthenticator extends BasicAuthAuthenticator implements 
     // Store the code + expiration time in a UserCredential. Keycloak will persist these in the DB.
     // When the code is validated on another node (in a clustered environment) the other nodes have access to it's values too.
     private void storeSMSCode(AuthenticationFlowContext context, String code, Long expiringAt) {
-
     	List<CredentialModel> codeCreds = getStoredCredentialsByType(context, KeycloakSmsConstants.USR_CRED_MDL_SMS_CODE);
-        List<CredentialModel> timeCreds = getStoredCredentialsByType(context, KeycloakSmsConstants.USR_CRED_MDL_SMS_EXP_TIME);
-        CredentialModel codeCredentials, timeCredentials;
+        CredentialModel codeCredentials = new CredentialModel();
     
 		if (codeCreds.isEmpty()) {
 			codeCredentials = new CredentialModel();
-			timeCredentials = new CredentialModel();
-
 			codeCredentials.setType(KeycloakSmsConstants.USR_CRED_MDL_SMS_CODE);
 			codeCredentials.setCredentialData(code);
+			codeCredentials.setSecretData((expiringAt).toString());
 
 			userCredentialManager(context).createCredential(context.getRealm(), context.getUser(), codeCredentials);
 
-			timeCredentials.setType(KeycloakSmsConstants.USR_CRED_MDL_SMS_EXP_TIME);
-			timeCredentials.setCredentialData(code);
-			timeCredentials.setSecretData((expiringAt).toString());
-			context.getSession().userCredentialManager().createCredential(context.getRealm(), context.getUser(),
-					timeCredentials);
 		} else {
 			codeCredentials = codeCreds.get(0);
-			timeCredentials = timeCreds.get(0);
 			codeCredentials.setCredentialData(code);
+			codeCredentials.setSecretData(expiringAt.toString());
 			userCredentialManager(context).updateCredential(context.getRealm(), context.getUser(), codeCredentials);
-
-			timeCredentials.setType(KeycloakSmsConstants.USR_CRED_MDL_SMS_EXP_TIME);
-			timeCredentials.setCredentialData(code);
-			timeCredentials.setSecretData((expiringAt).toString());
-			userCredentialManager(context).updateCredential(context.getRealm(), context.getUser(), timeCredentials);
 		}
     }
 
@@ -224,23 +212,21 @@ public class KeycloakSmsAuthenticator extends BasicAuthAuthenticator implements 
         String enteredCode = formData.getFirst(KeycloakSmsConstants.ANSW_SMS_CODE);
 
         List<CredentialModel> codeCreds = getStoredCredentialsByType(context, KeycloakSmsConstants.USR_CRED_MDL_SMS_CODE);
-        List<CredentialModel> timeCreds = getStoredCredentialsByType(context, KeycloakSmsConstants.USR_CRED_MDL_SMS_EXP_TIME);
 
-        CredentialModel expectedCode = (CredentialModel) codeCreds.get(0);
-        CredentialModel expTimeString = (CredentialModel) timeCreds.get(0);
+        if (!codeCreds.isEmpty()) {
+        	CredentialModel credential = (CredentialModel) codeCreds.get(0);
+        	String expectedCode = credential.getCredentialData();
+        	Long expTime = Long.parseLong(credential.getSecretData());
+        	long now = new Date().getTime();
 
-        logger.debug("Expected code = " + expectedCode + "    entered code = " + enteredCode);
-
-        if (expectedCode != null) {
-            result = enteredCode.equals(expectedCode.getCredentialData()) ? CODE_STATUS.VALID : CODE_STATUS.INVALID;
-            long now = new Date().getTime();
-
-            logger.debug("Valid code expires in " + (Long.parseLong(expTimeString.getSecretData()) - now) + " ms");
-            if (result == CODE_STATUS.VALID) {
-                if (Long.parseLong(expTimeString.getSecretData()) < now) {
+        	logger.debug("Expected code = " + expectedCode + "    entered code = " + enteredCode);
+            logger.debug("Valid code expires in " + (expTime - now) + " ms");
+        	
+            result = enteredCode.equals(expectedCode) ? CODE_STATUS.VALID : CODE_STATUS.INVALID;
+            
+            if (result == CODE_STATUS.VALID && expTime < now) {
                     logger.debug("Code is expired !!");
                     result = CODE_STATUS.EXPIRED;
-                }
             }
         }
         logger.debug("result : " + result);

@@ -3,6 +3,7 @@ package six.six.keycloak.requiredaction.action.required;
 import org.jboss.logging.Logger;
 import org.keycloak.authentication.RequiredActionContext;
 import org.keycloak.authentication.RequiredActionProvider;
+import org.keycloak.forms.login.LoginFormsProvider;
 import org.keycloak.models.UserModel;
 import six.six.keycloak.KeycloakSmsConstants;
 import six.six.keycloak.MobileNumberHelper;
@@ -31,10 +32,9 @@ public class KeycloakSmsMobilenumberRequiredAction implements RequiredActionProv
 
         UserModel user = context.getUser();
         String mobileNumber = MobileNumberHelper.getMobileNumber(user);
-
-        Response challenge = context.form()
-                .setAttribute("phoneNumber", mobileNumber)
-                .createForm("sms-validation-mobile-number.ftl");
+        LoginFormsProvider form = context.form();
+        form.setAttribute("mobileNumber", mobileNumber);
+        Response challenge = form.createForm("sms-validation-mobile-number.ftl");
         context.challenge(challenge);
     }
 
