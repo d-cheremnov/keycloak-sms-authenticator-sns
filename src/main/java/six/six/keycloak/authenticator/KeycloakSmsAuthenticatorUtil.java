@@ -200,6 +200,7 @@ public class KeycloakSmsAuthenticatorUtil {
                     break;
                 case AMAZON_SNS:
                     smsService = new SnsNotificationService();
+                    break;
                 default:
                 	smsService = new ConsoleSmsService();
             }
@@ -225,18 +226,17 @@ public class KeycloakSmsAuthenticatorUtil {
 
     /**
      * This validation matches the registration flow's validation
-     * https://github.com/UKGovernmentBEIS/beis-mspsds/blob/master/keycloak/providers/registration-form/src/main/java/uk/gov/beis/opss/keycloak/providers/RegistrationMobileNumber.java#L55
      */
     public static boolean isPhoneNumberValid(String phoneNumber) {
         String formattedPhoneNumber = convertInternationalPrefix(phoneNumber);
 
         String region;
         if (isPossibleNationalNumber(formattedPhoneNumber)) {
-            region = "IN";
+            region = "RU";
         } else if (isInternationalNumber(formattedPhoneNumber)) {
             region = null;
         } else {
-            return true; // If the number cannot be interpreted as an international or possible UK phone number, do not attempt to validate it.
+            return true; // If the number cannot be interpreted as an international, do not attempt to validate it.
         }
 
         try {
@@ -249,14 +249,14 @@ public class KeycloakSmsAuthenticatorUtil {
 
     private static String convertInternationalPrefix(String phoneNumber) {
         String trimmedPhoneNumber = phoneNumber.trim();
-        if (trimmedPhoneNumber.startsWith("00")) {
-            return trimmedPhoneNumber.replaceFirst("00", "+");
+        if (trimmedPhoneNumber.startsWith("8")) {
+            return trimmedPhoneNumber.replaceFirst("8", "+7");
         }
         return trimmedPhoneNumber;
     }
 
     private static boolean isPossibleNationalNumber(String phoneNumber) {
-        return phoneNumber.trim().startsWith("+91") || phoneNumber.trim().startsWith("0091");
+        return phoneNumber.trim().startsWith("+7");
     }
 
     private static boolean isInternationalNumber(String phoneNumber) {
